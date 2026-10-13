@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright (C) 2026 SISW Siemens Industry Software Inc.
 # Copyright> 
