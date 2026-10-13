@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright (C) 2026 SISW Siemens Industry Software Inc.
 # Copyright> 
@@ -19,8 +19,6 @@
 # Copyright>  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR 
 # Copyright>  IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#!/bin/bash
-
 
 
 
@@ -33,7 +31,7 @@ echo "**                                         **"
 echo "*********************************************"
 echo " "
 
-if [ "$#" == 0 ];then
+if (( $# == 0 ));then
   echo " "
   echo "Script Usage:"
   echo " "
@@ -54,197 +52,184 @@ if [ "$#" == 0 ];then
   exit 1
 fi
 
-libpath=$RAD_USERLIB_SDK_PATH/$RAD_USERLIB_ARCH
+libpath=${RAD_USERLIB_SDK_PATH}/${RAD_USERLIB_ARCH}
 
-got_starter=0
-got_engine=0
-got_static_lib=0
-got_outfile=0
-got_free=0
-got_addflag=0
-got_link_flags=0
+starter_files=()
+engine_files=()
+static_libraries=()
+static_library_names=()
+addflags=()
+link_flags=()
+free_flag=()
+
+unquote_path() {
+  local path="$1"
+  path="${path#\"}"
+  path="${path%\"}"
+  path="${path#\'}"
+  echo "${path%\'}"
+}
 
 for var in "$@"
 do
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "starter" ]
-    then
-      starter_files=`echo $var|awk -F '=' '{print $2}'`
-      got_starter=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "engine" ]
-    then
-      engine_files=`echo $var|awk -F '=' '{print $2}'`
-      got_engine=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "library" ]
-    then
-      static_library=`echo $var|awk -F '=' '{print $2}'`
-      got_static_lib=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "outfile" ]
-    then
-      outfile=`echo $var|awk -F '=' '{print $2}'`
-      got_outfile=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "addflag" ]
-    then
-      addfl=`echo $var|awk -F '=' '{print $2}'`
-      got_addflag=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "link_flags" ]
-    then
-      linkfl=`echo $var|awk -F '=' '{print $2}'`
-      got_link_flags=1
-    fi
-
-    arg=`echo $var|awk '{print $1}'`
-    if [ "$arg" == "-free" ]
-    then
-      got_free=1
-    fi
+    IFS='=' read -r arg value <<< "${var}"
+    case "${arg}" in
+      starter)
+        read -ra starter_files <<< "${value}"
+        for idx in "${!starter_files[@]}"; do
+          curr_path="$(unquote_path "${starter_files[idx]}")"
+          starter_files[idx]="${curr_path}"
+        done
+        ;;
+      engine)
+        read -ra engine_files <<< "${value}"
+        for idx in "${!engine_files[@]}"; do
+          curr_path="$(unquote_path "${engine_files[idx]}")"
+          engine_files[idx]="${curr_path}"
+        done
+        ;;
+      library)
+        read -ra static_libraries <<< "${value}"
+        for idx in "${!static_libraries[@]}"; do
+          curr_path="$(unquote_path "${static_libraries[idx]}")"
+          static_library_names+=( "${curr_path##*/}" )
+          static_libraries[idx]="${curr_path}"
+        done
+        ;;
+      outfile)
+        outfile="${value}"
+        ;;
+      addflag)
+        read -ra addflags <<< "${value}"
+        ;;
+      link_flags)
+        read -ra link_flags <<< "${value}"
+        ;;
+      *)
+        arg="$(echo "${var}"|awk '{print $1}')"
+        if [[ "${arg}" == "-free" ]]
+        then
+          free_flag=( -ffree-form )
+        fi
+    esac
 
 done
 
-if [ $got_outfile == 1 ]
+if [[ -n "${outfile}" ]]
 then
-   outlib=../$outfile
-   outnam=$outfile
+  outlib=../${outfile}
+  outnam=${outfile}
 else
-   outlib=../libraduser_linux64.so
-   outnam=libraduser_linux64.so
-fi
-
-if [ $got_free == 1 ]
-then
-   free_flag=" -ffree-form "
-else
-   free_flag=" "
-fi
-
-if [ $got_addflag == 1 ]
-then
-   addflag=$addfl
-else
-   addflag=" "
-fi
-
-if [ $got_link_flags == 1 ]
-then
-   link_flags=$linkfl
-else
-   link_flags=" "
+  outlib=../libraduser_linux64.so
+  outnam=libraduser_linux64.so
 fi
 
 # ----------------------------------------------------------
 # Check environment variables 
 # if they are wrong, the static interface library could not be found
 # ----------------------------------------------------------
-if [ ! -f $libpath/libraduser_linux64_gfortran.a ]
+if [[ ! -f ${libpath}/libraduser_linux64_gfortran.a ]]
 then
-echo "*** Error : " 
-echo " "
-echo $libpath/libraduser_linux64_gfortran.a 
-echo " "
-echo "not found"
-echo " "
-echo " "
-echo "Check environment variables:"
-echo " "
-echo "RAD_USERLIB_SDK_PATH"
-echo "RAD_USERLIB_ARCH"
-echo " "
-echo " "
-exit 0
+  echo "*** Error : "
+  echo " "
+  echo "${libpath}/libraduser_linux64_gfortran.a"
+  echo " "
+  echo "not found"
+  echo " "
+  echo " "
+  echo "Check environment variables:"
+  echo " "
+  echo "RAD_USERLIB_SDK_PATH"
+  echo "RAD_USERLIB_ARCH"
+  echo " "
+  echo " "
+  exit 0
 fi
 
-mkdir _obj_linux64_$$
+rundir=_obj_linux64_$$
 
-if [ $got_starter == 1 ]
+mkdir "${rundir}"
+
+if (( "${#starter_files[@]}" > 0 ))
 then
-  cp $starter_files _obj_linux64_$$
+  cp "${starter_files[@]}" "${rundir}"
 fi
 
-if [ $got_engine == 1 ]
+if (( "${#engine_files[@]}" > 0 ))
 then
-  cp $engine_files _obj_linux64_$$
+  cp "${engine_files[@]}" "${rundir}"
 fi
 
 
 #Verify if an additional statical library was set
 
-if [ $got_static_lib == 1 ]
+if (( "${#static_libraries[@]}" > 0 ))
 then
-     cp $static_library _obj_linux64_$$ 
-     static_libname=`echo $static_library|awk -F '/' '{print $NF}'`
-     echo " " 
-     echo "adding $static_libname in library"
+     cp "${static_libraries[@]}" "${rundir}"
+     echo " "
+     echo "adding ${static_library_names[*]} in library"
      echo "---------------------------------"
-     echo " " 
+     echo " "
 fi
 
-cd  _obj_linux64_$$
+fortran_head_args=(
+  "${free_flag[@]}"
+  -fintrinsic-modules-path "${libpath}"
+  "${addflags[@]}" -fPIC
+)
 
+fortran_tail_args=(
+  -fopenmp -DMYREAL8 -DR8 -ffixed-line-length-132
+)
 
-ar -x $libpath/libraduser_linux64_gfortran.a
+(
+  cd "${rundir}"
 
-#extract statical library
-if [ $got_static_lib == 1 ]
-then
-  for lib in $static_libname
+  ar -x "${libpath}/libraduser_linux64_gfortran.a"
+
+  #extract statical library
+  for lib in "${static_library_names[@]}"
   do
-   if [ -f $lib ]
-   then
-     echo extracting $lib
-     ar -x $lib
-   fi
+    if [[ -f ${lib} ]]
+    then
+      echo "extracting ${lib}"
+      ar -x "${lib}"
+    fi
   done
-fi
+
+  if (( "${#starter_files[@]}" > 0 ))
+  then
+    echo " "
+    echo " "
+    echo " Compiling: ${starter_files[*]}"
+    echo "-----------"
+    echo " "
+    gfortran "${fortran_head_args[@]}" -O2 "${fortran_tail_args[@]}" -c "${starter_files[@]}"
+  fi
+
+  if (( "${#engine_files[@]}" > 0 ))
+  then
+    echo " "
+    echo " "
+    echo "Compiling: ${engine_files[*]}"
+    echo "----------"
+    echo " "
+    gfortran "${fortran_head_args[@]}" -O3 "${fortran_tail_args[@]}" -c "${engine_files[@]}"
+  fi
 
 
-if [ $got_starter == 1 ]
-then
-echo " " 
-echo " " 
-echo " Compiling: " $starter_files
-echo "-----------"
-echo " "
-  gfortran $free_flag -fintrinsic-modules-path $libpath $addflag -fPIC  -O2 -fopenmp -DMYREAL8 -DR8 -ffixed-line-length-132 -c $starter_files
-fi
 
-if [ $got_engine == 1 ]
-then
-  echo " " 
-  echo " " 
-  echo "Compiling: " $engine_files
-  echo "----------"
   echo " "
-  gfortran $free_flag -fintrinsic-modules-path $libpath  $addflag -fPIC -O3 -fopenmp  -DMYREAL8 -DR8 -ffixed-line-length-132 -c $engine_files
-fi
+  echo " "
+  echo "Creating library: ${outnam}"
+  echo "-----------------"
+  echo " "
 
 
+  gfortran "${addflags[@]}" -fPIC -shared -O2 -o "${outlib}" ./*.o "${link_flags[@]}"
+)
 
-echo " "
-echo " "
-echo "Creating library: " $outnam
-echo "-----------------"
-echo " "
-
-
-gfortran  $addflag -fPIC -shared  -O2  -o $outlib *.o $link_flags
-
-cd ..
-rm -rf  _obj_linux64_$$
+rm -rf  "${rundir}"
 
 echo " "
 echo " "
