@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright (C) 2026 SISW Siemens Industry Software Inc.
 # Copyright> 
@@ -18,8 +18,6 @@
 # Copyright>  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIAsBILITY, 
 # Copyright>  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR 
 # Copyright>  IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-#!/bin/bash
 
 
 function my_help()
@@ -53,11 +51,9 @@ suffix=''
 got_compiler=0
 got_arch=0
 clean=0
-verbose=''
+verbose=()
 
-number_of_arguments=$#
-
-if [ $number_of_arguments = 0 ]
+if (( $# == 0 ))
 then
 
   my_help
@@ -67,41 +63,34 @@ else
 
    for var in "$@"
    do
-       arg=`echo $var|awk -F '=' '{print $1}'`
-       if [ "$arg" == "-arch" ]
-       then
-         arch=`echo $var|awk -F '=' '{print $2}'`
-         got_arch=1
-       fi
-
-       if [ "$arg" == "-compiler" ]
-       then
-         compiler=`echo $var|awk -F '=' '{print $2}'`
-         got_compiler=1
-       fi
-       
-       if [ "$arg" == "-prec" ]
-       then
-         prec=`echo $var|awk -F '=' '{print $2}'`
-         if [ ${prec} = 'sp' ]
-         then
-           suffix=_sp
-         fi
-       fi
-
-       if [ "$arg" == "-clean" ]
-       then
-         clean=1
-       fi
-       
-       if [ "$arg" == "-verbose" ]
-       then
-         verbose='VERBOSE=1'
-       fi
+      IFS='=' read -r arg val <<< "${var}"
+      case "${arg}" in
+        -arch)
+          arch="${val}"
+          got_arch=1
+          ;;
+        -compiler)
+          compiler="${val}"
+          got_compiler=1
+          ;;
+        -prec)
+          prec="${val}"
+          if [[ ${prec} == 'sp' ]]
+          then
+            suffix=_sp
+          fi
+          ;;
+        -clean)
+          clean=1
+          ;;
+        -verbose)
+          verbose=( 'VERBOSE=1' )
+          ;;
+      esac
 
    done
 
-  if [ $got_arch = '0' ]
+  if (( got_arch == 0 ))
   then
      echo " Error : "
      echo " ------  "
@@ -113,54 +102,44 @@ else
   fi
 
 
-  if [ $got_compiler = 0 ]
+  if (( got_compiler == 0 ))
   then
-     if [ $arch == "win64" ]
-     then
-       compiler=oneapi
-     fi
-     
-     if [ $arch == "linux64" ]
-     then
-       compiler=gfortran
-     fi
-     
-     if [ $arch = 'linuxa64' ]
-     then
-       compiler=gfortran
-     fi
+    case "${arch}" in
+      win64) compiler=oneapi ;;
+      linux64 | linuxa64) compiler=gfortran ;;
+    esac
   fi
 
    echo " " 
    echo " Build Radioss(TM) Userlib SDK"
    echo " ------------------------------"
    echo " Build Arguments :"
-   echo " arch=            " $arch
-   echo " compiler=        " $compiler
+   echo " arch=            $arch"
+   echo " compiler=         $compiler"
    echo " " 
 fi
 
 # Library extention 
 
-if [ "$arch" == "win64" ] && [ "$compiler" != "gfortran" ]
+if [[ "$arch" == "win64" && "$compiler" != "gfortran" ]]
 then
   lib=.lib
 else
   lib=.a
 fi
-echo $LIB_EXT
+echo "$LIB_EXT"
 
 # build & object directory
 build_directory=cbuild_${arch}_${compiler}${suffix}
 sdk_directory=${arch}${suffix}_${compiler}
 
 # clean option
-if [ $clean = 1 ]
+if (( clean == 1 ))
 then
-   if [ -d ${build_directory} ]
+   if [[ -d ${build_directory} ]]
    then
      echo "Clean ${build_directory} directory"
-     rm -rf ./${build_directory}
+     rm -rf "./${build_directory}"
    else
      echo "Clean ${build_directory} directory requested but not found"
    fi
@@ -168,26 +147,28 @@ then
    exit 0
 fi
 
-# create build directory
-if [ ! -d ${build_directory} ] 
-then
-   mkdir ${build_directory}
-fi
+# create build directory if it does not exist
+mkdir -p "${build_directory}"
 
-cd $build_directory
+cmake_args=(
+  -Darch="${arch}" -Dcompiler="${compiler}" -Dprecision="${prec}" ../source
+)
 
-if [ $arch = "win64" ]
-then
-  cmake -G "Unix Makefiles" -Darch=${arch} -Dcompiler=${compiler} -Dprecision=${prec} ../source
-else
-  cmake -Darch=${arch} -Dcompiler=${compiler} -Dprecision=${prec} ../source
-fi
+(
+  cd "${build_directory}"
 
-make ${verbose}
+  if [[ $arch == "win64" ]]
+  then
+    cmake -G "Unix Makefiles" "${cmake_args[@]}"
+  else
+    cmake "${cmake_args[@]}"
+  fi
 
-cp libraduser_${arch}${suffix}_${compiler}${lib} *.mod ../userlib_sdk/${sdk_directory}
+  make "${verbose[@]}"
 
-cd ..
+  cp "libraduser_${arch}${suffix}_${compiler}${lib}" ./*.mod "../userlib_sdk/${sdk_directory}"
+
+)
 
 
 
@@ -195,4 +176,3 @@ echo " "
 echo " Done"
 echo " ----" 
 echo " " 
-
