@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 # Copyright (C) 2026 SISW Siemens Industry Software Inc.
 #
@@ -21,20 +21,13 @@
 
 # Path to the Python script
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python_script_dir=$script_dir
 
 script_path="OpenRadioss_gui.py"
-if [ ! -d  $HOME/.OpenRadioss_GUI ]
-then 
-     mkdir $HOME/.OpenRadioss_GUI
-fi
-if [ ! -d  $HOME/.OpenRadioss_GUI/__pycache__ ]
-then
-     mkdir $HOME/.OpenRadioss_GUI/__pycache__
-fi
+PYTHONPYCACHEPREFIX="${HOME}/.OpenRadioss_GUI/__pycache__"
+mkdir -p "${PYTHONPYCACHEPREFIX}"
 
 # Call the Python script using Python 3
-echo $HOME/.OpenRadioss_GUI/__pycache__
-export PYTHONPYCACHEPREFIX=$HOME/.OpenRadioss_GUI/__pycache__
+echo "${PYTHONPYCACHEPREFIX}"
+export PYTHONPYCACHEPREFIX
 
-python3 $script_dir/OpenRadioss_gui.py $@
+python3 "${script_dir}/${script_path}" "$@"
