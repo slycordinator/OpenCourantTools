@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright> (C) 2026 SISW Siemens Industry Software Inc.
 # Copyright> 
@@ -19,8 +19,6 @@
 # Copyright>  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR 
 # Copyright>  IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#!/bin/bash
-
 
 
 
@@ -33,7 +31,7 @@ echo "**                                         **"
 echo "*********************************************"
 echo " "
 
-if [ "$#" == 0 ];then
+if (( "$#" == 0 ));then
   echo " "
   echo "Script Usage:"
   echo " "
@@ -56,105 +54,85 @@ fi
 
 libpath=$RAD_USERLIB_SDK_PATH/$RAD_USERLIB_ARCH
 
-got_starter=0
-got_engine=0
-got_static_lib=0
-got_outfile=0
-got_free=0
-got_addflag=0
-got_link_flags=0
+starter_files=()
+engine_files=()
+static_libraries=()
+static_library_names=()
+addflags=()
+link_flags=()
+free_flag=()
+
+unquote_path() {
+  local path="$1"
+  path="${path#\"}"
+  path="${path%\"}"
+  path="${path#\'}"
+  echo "${path%\'}"
+}
 
 for var in "$@"
 do
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "starter" ]
-    then
-      starter_files=`echo $var|awk -F '=' '{print $2}'`
-      got_starter=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "engine" ]
-    then
-      engine_files=`echo $var|awk -F '=' '{print $2}'`
-      got_engine=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "library" ]
-    then
-      static_library=`echo $var|awk -F '=' '{print $2}'`
-      got_static_lib=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "outfile" ]
-    then
-      outfile=`echo $var|awk -F '=' '{print $2}'`
-      got_outfile=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "addflag" ]
-    then
-      addfl=`echo $var|awk -F '=' '{print $2}'`
-      got_addflag=1
-    fi
-
-    arg=`echo $var|awk -F '=' '{print $1}'`
-    if [ "$arg" == "link_flags" ]
-    then
-      linkfl=`echo $var|awk -F '=' '{print $2}'`
-      got_link_flags=1
-    fi
-
-    arg=`echo $var|awk '{print $1}'`
-    if [ "$arg" == "-free" ]
-    then
-      got_free=1
-    fi
+    IFS='=' read -r arg value <<< "${var}"
+    case "$arg" in
+      starter)
+        read -ra starter_files <<< "${value}"
+        for idx in "${!starter_files[@]}"; do
+          curr_path="$(unquote_path "${starter_files[idx]}")"
+          starter_files[idx]="${curr_path}"
+        done
+        ;;
+      engine)
+        read -ra engine_files <<< "${value}"
+        for idx in "${!engine_files[@]}"; do
+          curr_path="$(unquote_path "${engine_files[idx]}")"
+          engine_files[idx]="${curr_path}"
+        done
+        ;;
+      library)
+        read -ra static_libraries <<< "${value}"
+        for idx in "${!static_libraries[@]}"; do
+          curr_path="$(unquote_path "${static_libraries[idx]}")"
+          static_library_names+=( "${curr_path##*/}" )
+          static_libraries[idx]="${curr_path}"
+        done
+        ;;
+      outfile)
+        outfile="${value}"
+        ;;
+      addflag)
+        read -ra addflags <<< "${value}"
+        ;;
+      link_flags)
+        read -ra link_flags <<< "${value}"
+        ;;
+      *)
+        arg="$(echo "${var}"|awk '{print $1}')"
+        if [[ "${arg}" == "-free" ]]
+        then
+          free_flag=( -ffree-form )
+        fi
+    esac
 
 done
 
-if [ $got_outfile == 1 ]
+if [[ -n "${outfile}" ]]
 then
-   outlib=../$outfile
-   outnam=$outfile
+  outlib=../${outfile}
+  outnam=${outfile}
 else
-   outlib=../libraduser_linux64.so
-   outnam=libraduser_linux64.so
-fi
-
-if [ $got_free == 1 ]
-then
-   free_flag=" -free "
-else
-   free_flag=" "
-fi
-
-if [ $got_addflag == 1 ]
-then
-   addflag=$addfl
-else
-   addflag=" "
-fi
-
-if [ $got_link_flags == 1 ]
-then
-   link_flags=$linkfl
-else
-   link_flags=" "
+  outlib=../libraduser_linux64.so
+  outnam=libraduser_linux64.so
 fi
 
 # ----------------------------------------------------------
 # Check environment variables 
 # if they are wrong, the static interface library could not be found
 # ----------------------------------------------------------
-if [ ! -f $libpath/libraduser_linux64_intel.a ]
+if [[ ! -f ${libpath}/libraduser_linux64_intel.a ]]
 then
-echo "*** Error : " 
+echo "*** Error : "
 echo " "
-echo $libpath/libraduser_linux64_intel.a 
+echo "${libpath}/libraduser_linux64_intel.a"
 echo " "
 echo "not found"
 echo " "
@@ -168,92 +146,99 @@ echo " "
 exit 0
 fi
 
-mkdir _obj_linux64_$$
+rundir=_obj_linux64_$$
 
-if [ $got_starter == 1 ]
+mkdir "${rundir}"
+
+if (( "${#starter_files[@]}" > 0 ))
 then
-  cp $starter_files _obj_linux64_$$
+  cp "${starter_files[@]}" "${rundir}"
 fi
 
-if [ $got_engine == 1 ]
+if (( "${#engine_files[@]}" > 0 ))
 then
-  cp $engine_files _obj_linux64_$$
+  cp "${engine_files[@]}" "${rundir}"
 fi
 
 
 #Verify if an additional statical library was set
 
-if [ $got_static_lib == 1 ]
+if (( "${#static_libraries[@]}" > 0 ))
 then
-     cp $static_library _obj_linux64_$$ 
-     static_libname=`echo $static_library|awk -F '/' '{print $NF}'`
-     echo " " 
-     echo "adding $static_libname in library"
+     cp "${static_libraries[@]}" "${rundir}"
+     echo " "
+     echo "adding ${static_library_names[*]} in library"
      echo "---------------------------------"
-     echo " " 
+     echo " "
 fi
 
-cd  _obj_linux64_$$
+ifort_main_args=(
+  "${free_flag[@]}" -module "${libpath}" "${addflags[@]}" -fPIC
+)
+
+ifort_tail_args=(
+  -ftz -extend-source -qopenmp -assume buffered_io -DMYREAL8 -DR8
+)
+
+ifort_library_args=(
+  "${addflags[@]}" -fPIC -shared -static-intel -qopenmp-link=static
+)
+
+(
+  cd  "${rundir}"
 
 
-ar -x $libpath/libraduser_linux64_intel.a
+  ar -x "${libpath}/libraduser_linux64_intel.a"
 
-#extract statical library
-if [ $got_static_lib == 1 ]
-then
-  for lib in $static_libname
+  #extract statical library
+  for lib in "${static_library_names[@]}"
   do
-   if [ -f $lib ]
-   then
-     echo extracting $lib
-     ar -x $lib
-   fi
+    if [[ -f ${lib} ]]
+    then
+      echo "extracting ${lib}"
+      ar -x "${lib}"
+    fi
   done
-fi
 
 
-if [ $got_starter == 1 ]
-then
-echo " " 
-echo " " 
-echo " Compiling: " $starter_files
-echo "-----------"
-echo " "
-  ifort $free_flag -module $libpath $addflag -fPIC -axsse3 -O2 -fp-model precise -ftz -extend-source -qopenmp -assume buffered_io -DMYREAL8 -DR8 -c $starter_files
-fi
+  if (( "${#starter_files[@]}" > 0 ))
+  then
+    echo " "
+    echo " "
+    echo " Compiling: ${starter_files[*]}"
+    echo "-----------"
+    echo " "
+    ifort "${ifort_main_args[@]}" -axsse3 -O2 -fp-model precise "${ifort_tail_args[@]}" -c "${starter_files[@]}"
+  fi
 
-if [ $got_engine == 1 ]
-then
-  echo " " 
-  echo " " 
-  echo "Compiling: " $engine_files
-  echo "----------"
+  if (( "${#engine_files[@]}" > 0 ))
+  then
+    echo " "
+    echo " "
+    echo "Compiling: ${engine_files[*]}"
+    echo "----------"
+    echo " "
+    ifort "${ifort_main_args[@]}" -axSSE3,COMMON-AVX512 -no-fma -O3 -fp-model precise -align array64byte -fimf-use-svml=true "${ifort_tail_args[@]}" -c "${engine_files[@]}"
+  fi
+
+
+
   echo " "
-  ifort $free_flag -module $libpath $addflag -fPIC -axSSE3,COMMON-AVX512 -no-fma -O3 -fp-model precise -align array64byte -fimf-use-svml=true -qopenmp -ftz  -extend-source -assume buffered_io -DMYREAL8 -DR8 -c $engine_files
-fi
+  echo " "
+  echo "Creating library: ${outnam}"
+  echo "-----------------"
+  echo " "
 
+  if [[ -z "${INTEL_LIBRARY_PATH}" ]]
+  then
+    ifort "${ifort_library_args[@]}" -axsse3 -O2 -fp-model precise -ftz -o "${outlib}" ./*.o "${link_flags[@]}" -lifcoremt_pic
+  else
+    ar -x "${INTEL_LIBRARY_PATH}/libifcoremt_pic.a"
+    ifort "${ifort_library_args[@]}" -axSSE3,COMMON-AVX512 -no-fma -O3 -fp-model precise -align array64byte -fimf-use-svml=true -qopenmp -ftz -extend-source -assume buffered_io -o "${outlib}" ./*.o  "${link_flags[@]}" 
+  fi
+)
 
-
-echo " "
-echo " "
-echo "Creating library: " $outnam
-echo "-----------------"
-echo " "
-
-if [ "$INTEL_LIBRARY_PATH" = "" ]
-then
-
-ifort  $addflag -fPIC -shared -static-intel -qopenmp-link=static -axsse3 -O2 -fp-model precise -ftz -o $outlib *.o $link_flags -lifcoremt_pic
-
-else
-
-ar -x  $INTEL_LIBRARY_PATH/libifcoremt_pic.a
-ifort  $addflag -fPIC -shared -static-intel -qopenmp-link=static -axSSE3,COMMON-AVX512 -no-fma -O3 -fp-model precise -align array64byte -fimf-use-svml=true -qopenmp -ftz  -extend-source -assume buffered_io -o $outlib  *.o  $link_flags 
-
-fi 
-
-cd ..
-rm -rf  _obj_linux64_$$
+rm -rf "${rundir}"
 
 echo " "
 echo " "
